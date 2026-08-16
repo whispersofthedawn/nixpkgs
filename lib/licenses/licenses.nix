@@ -973,6 +973,11 @@ lib.mapAttrs mkLicense (
       redistributable = true;
     };
 
+    ibmpl10 = {
+      fullName = "IBM Public License v1.0";
+      spdxId = "IPL-1.0";
+    };
+
     issl = {
       fullName = "Intel Simplified Software License";
       url = "https://software.intel.com/en-us/license/intel-simplified-software-license";
