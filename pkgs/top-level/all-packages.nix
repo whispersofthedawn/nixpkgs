@@ -3737,6 +3737,9 @@ with pkgs;
   jdk = jdk21;
   jdk_headless = jdk21_headless;
 
+  # Java bootstrap packages
+  jdkBootstrapPackages = callPackage ../development/compilers/openjdk/bootstrap.nix { };
+
   # Since the introduction of the Java Platform Module System in Java 9, Java
   # no longer ships a separate JRE package.
   #
