@@ -76,9 +76,10 @@
   temurin-bin-17,
   temurin-bin-21,
   temurin-bin-25,
+  jdkBootstrapPackages,
   jdk-bootstrap ?
     {
-      "8" = temurin-bin-8.__spliced.buildBuild or temurin-bin-8;
+      "8" = jdkBootstrapPackages.icedtea_7.__spliced.buildBuild or jdkBootstrapPackages.icedtea_7;
       "11" = temurin-bin-11.__spliced.buildBuild or temurin-bin-11;
       "17" = temurin-bin-17.__spliced.buildBuild or temurin-bin-17;
       "21" = temurin-bin-21.__spliced.buildBuild or temurin-bin-21;
@@ -121,10 +122,11 @@ let
       }
       .${stdenv.system} or (throw "Unsupported platform ${stdenv.system}");
 
-  jdk-bootstrap' = jdk-bootstrap.override {
-    # when building a headless jdk, also bootstrap it with a headless jdk
-    gtkSupport = !headless;
-  };
+  jdk-bootstrap' = jdk-bootstrap;
+  # jdk-bootstrap' = jdk-bootstrap.override {
+  #   # when building a headless jdk, also bootstrap it with a headless jdk
+  #   gtkSupport = !headless;
+  # };
 in
 
 assert lib.assertMsg (lib.pathExists sourceFile)
@@ -325,7 +327,7 @@ stdenv.mkDerivation (finalAttrs: {
     "NM=${stdenv.cc.targetPrefix}nm"
     "OBJDUMP=${stdenv.cc.targetPrefix}objdump"
     "OBJCOPY=${stdenv.cc.targetPrefix}objcopy"
-    "--with-boot-jdk=${jdk-bootstrap'.home}"
+    "--with-boot-jdk=${jdk-bootstrap}"
     "--enable-unlimited-crypto"
     "--with-native-debug-symbols=internal"
     "--with-stdc++lib=dynamic"
