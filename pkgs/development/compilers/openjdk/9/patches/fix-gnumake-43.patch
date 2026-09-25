@@ -1,0 +1,15 @@
+diff --git i/make/common/MakeBase.gmk w/make/common/MakeBase.gmk
+index ff8ced0fcf..90cd7229ae 100644
+--- i/make/common/MakeBase.gmk
++++ w/make/common/MakeBase.gmk
+@@ -890,7 +890,9 @@ DependOnVariableHelper = \
+               $(info NewVariable $1: >$(strip $($1))<) \
+               $(info OldVariable $1: >$(strip $($1_old))<)) \
+           $(call WriteFile, $1_old:=$(call DoubleDollar,$(call EscapeHash,$($1))), \
+-              $(call DependOnVariableFileName, $1, $2))) \
++              $(call DependOnVariableFileName, $1, $2)) \
++              $(eval $(call DependOnVariableFileName, $1, $2): ) \
++              ) \
+         $(call DependOnVariableFileName, $1, $2) \
+     )
+ 

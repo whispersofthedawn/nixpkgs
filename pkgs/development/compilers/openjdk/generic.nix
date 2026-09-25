@@ -71,21 +71,26 @@
   gtk3,
   glib,
 
-  temurin-bin-8,
   temurin-bin-11,
   temurin-bin-17,
   temurin-bin-21,
   temurin-bin-25,
+  openjdk8,
   jdkBootstrapPackages,
   jdk-bootstrap ?
     {
       "8" = jdkBootstrapPackages.icedtea_7.__spliced.buildBuild or jdkBootstrapPackages.icedtea_7;
+      "9" = openjdk8.__spliced.buildBuild or openjdk8;
       "11" = temurin-bin-11.__spliced.buildBuild or temurin-bin-11;
       "17" = temurin-bin-17.__spliced.buildBuild or temurin-bin-17;
       "21" = temurin-bin-21.__spliced.buildBuild or temurin-bin-21;
       "25" = temurin-bin-25.__spliced.buildBuild or temurin-bin-25;
     }
     .${featureVersion},
+
+  # Set if this is a bootstrap JDK, which are not shown in search since we don't
+  # want users to be using them.
+  isBootstrap ? false,
 }:
 
 assert lib.assertMsg (enableGtk -> lib.versionAtLeast featureVersion "11")
@@ -98,15 +103,19 @@ let
     featureVersionPrefix = tagPrefix + featureVersion;
   };
 
+  is8 = featureVersion == "8";
   atLeast11 = lib.versionAtLeast featureVersion "11";
   atLeast17 = lib.versionAtLeast featureVersion "17";
   atLeast21 = lib.versionAtLeast featureVersion "21";
   atLeast23 = lib.versionAtLeast featureVersion "23";
   atLeast25 = lib.versionAtLeast featureVersion "25";
 
-  tagPrefix = if atLeast11 then "jdk-" else "jdk";
+  # bootstrap JDKs always use `jdk-` as their prefix
+  tagPrefix = if (atLeast11 || isBootstrap) then "jdk-" else "jdk";
   version = lib.removePrefix "refs/tags/${tagPrefix}" source.src.rev;
-  versionSplit = builtins.match (if atLeast11 then "(.+)+(.+)" else "(.+)-b(.+)") version;
+  versionSplit = builtins.match (
+    if (atLeast11 || isBootstrap) then "(.+)+(.+)" else "(.+)-b(.+)"
+  ) version;
   versionBuild = lib.elemAt versionSplit 1;
 
   # The JRE 8 libraries are in directories that depend on the CPU.
@@ -122,11 +131,10 @@ let
       }
       .${stdenv.system} or (throw "Unsupported platform ${stdenv.system}");
 
-  jdk-bootstrap' = jdk-bootstrap;
-  # jdk-bootstrap' = jdk-bootstrap.override {
-  #   # when building a headless jdk, also bootstrap it with a headless jdk
-  #   gtkSupport = !headless;
-  # };
+  jdk-bootstrap' = jdk-bootstrap.override {
+    # when building a headless jdk, also bootstrap it with a headless jdk
+    enableGtk = !headless;
+  };
 in
 
 assert lib.assertMsg (lib.pathExists sourceFile)
@@ -145,98 +153,124 @@ stdenv.mkDerivation (finalAttrs: {
 
   inherit (source) src;
 
-  patches = [
-    (
-      if atLeast25 then
-        ./25/patches/fix-java-home-jdk25.patch
-      else if atLeast21 then
-        ./21/patches/fix-java-home-jdk21.patch
-      else if atLeast11 then
-        ./11/patches/fix-java-home-jdk10.patch
-      else
-        ./8/patches/fix-java-home-jdk8.patch
-    )
-    (
-      if atLeast25 then
-        ./25/patches/read-truststore-from-env-jdk25.patch
-      else if atLeast11 then
-        ./11/patches/read-truststore-from-env-jdk10.patch
-      else
-        ./8/patches/read-truststore-from-env-jdk8.patch
-    )
-  ]
-  ++ lib.optionals (!atLeast23) [
-    (
-      if atLeast11 then
-        ./11/patches/currency-date-range-jdk10.patch
-      else
-        ./8/patches/currency-date-range-jdk8.patch
-    )
-  ]
-  ++ lib.optionals atLeast11 [
-    (
-      if atLeast17 then
-        ./17/patches/increase-javadoc-heap-jdk13.patch
-      else
-        ./11/patches/increase-javadoc-heap.patch
-    )
-  ]
-  ++ lib.optionals atLeast17 [
-    (
-      if atLeast21 then
-        ./21/patches/ignore-LegalNoticeFilePlugin-jdk18.patch
-      else
-        ./17/patches/ignore-LegalNoticeFilePlugin-jdk17.patch
-    )
-  ]
-  ++ lib.optionals (!atLeast21) [
-    (
-      if atLeast17 then
-        ./17/patches/fix-library-path-jdk17.patch
-      else if atLeast11 then
-        ./11/patches/fix-library-path-jdk11.patch
-      else
-        ./8/patches/fix-library-path-jdk8.patch
-    )
-  ]
-  ++ lib.optionals (atLeast17 && !atLeast23) [
-    # -Wformat etc. are stricter in newer gccs, per
-    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79677
-    # so grab the work-around from
-    # https://src.fedoraproject.org/rpms/java-openjdk/pull-request/24
-    (fetchurl {
-      url = "https://src.fedoraproject.org/rpms/java-openjdk/raw/06c001c7d87f2e9fe4fedeef2d993bcd5d7afa2a/f/rh1673833-remove_removal_of_wformat_during_test_compilation.patch";
-      sha256 = "082lmc30x64x583vqq00c8y0wqih3y4r0mp1c4bqq36l22qv6b6r";
-    })
-  ]
-  ++ lib.optionals (featureVersion == "17") [
-    # Patch borrowed from Alpine to fix build errors with musl libc and recent gcc.
-    # This is applied anywhere to prevent patchrot.
-    (fetchurl {
-      url = "https://git.alpinelinux.org/aports/plain/community/openjdk17/FixNullPtrCast.patch?id=41e78a067953e0b13d062d632bae6c4f8028d91c";
-      sha256 = "sha256-LzmSew51+DyqqGyyMw2fbXeBluCiCYsS1nCjt9hX6zo=";
-    })
-  ]
-  ++ lib.optionals (atLeast11 && !atLeast25) [
-    # Fix build for gnumake-4.4.1:
-    #   https://github.com/openjdk/jdk/pull/12992
-    (fetchpatch {
-      name = "gnumake-4.4.1";
-      url = "https://github.com/openjdk/jdk/commit/9341d135b855cc208d48e47d30cd90aafa354c36.patch";
-      hash = "sha256-Qcm3ZmGCOYLZcskNjj7DYR85R4v07vYvvavrVOYL8vg=";
-    })
-  ]
-  ++ lib.optionals atLeast25 [
-    ./25/patches/make-4.4.1.patch
-  ]
-  ++ lib.optionals (!headless && enableGtk) [
-    (
-      if atLeast17 then ./17/patches/swing-use-gtk-jdk13.patch else ./11/patches/swing-use-gtk-jdk10.patch
-    )
-  ]
-  ++ lib.optionals (featureVersion == "11") [
-    ./11/patches/fix-oopdesc-ptr-alignment-ub.patch
-  ];
+  patches =
+    let
+      patchList = [
+        (
+          if atLeast25 then
+            ./25/patches/fix-java-home-jdk25.patch
+          else if atLeast21 then
+            ./21/patches/fix-java-home-jdk21.patch
+          else if atLeast11 then
+            ./11/patches/fix-java-home-jdk10.patch
+          else if is8 then
+            ./8/patches/fix-java-home-jdk8.patch
+          else
+            null
+        )
+        (
+          if atLeast25 then
+            ./25/patches/read-truststore-from-env-jdk25.patch
+          else if atLeast11 then
+            ./11/patches/read-truststore-from-env-jdk10.patch
+          else if is8 then
+            ./8/patches/read-truststore-from-env-jdk8.patch
+          else
+            null
+        )
+      ]
+      ++ lib.optionals (!atLeast23) [
+        (
+          if atLeast11 then
+            ./11/patches/currency-date-range-jdk10.patch
+          else if is8 then
+            ./8/patches/currency-date-range-jdk8.patch
+          else
+            null
+        )
+      ]
+      ++ lib.optionals atLeast11 [
+        (
+          if atLeast17 then
+            ./17/patches/increase-javadoc-heap-jdk13.patch
+          else
+            ./11/patches/increase-javadoc-heap.patch
+        )
+      ]
+      ++ lib.optionals atLeast17 [
+        (
+          if atLeast21 then
+            ./21/patches/ignore-LegalNoticeFilePlugin-jdk18.patch
+          else
+            ./17/patches/ignore-LegalNoticeFilePlugin-jdk17.patch
+        )
+      ]
+      ++ lib.optionals (!atLeast21) [
+        (
+          if atLeast17 then
+            ./17/patches/fix-library-path-jdk17.patch
+          else if atLeast11 then
+            ./11/patches/fix-library-path-jdk11.patch
+          else if is8 then
+            ./8/patches/fix-library-path-jdk8.patch
+          else
+            null
+        )
+      ]
+      ++ lib.optionals (atLeast17 && !atLeast23) [
+        # -Wformat etc. are stricter in newer gccs, per
+        # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79677
+        # so grab the work-around from
+        # https://src.fedoraproject.org/rpms/java-openjdk/pull-request/24
+        (fetchurl {
+          url = "https://src.fedoraproject.org/rpms/java-openjdk/raw/06c001c7d87f2e9fe4fedeef2d993bcd5d7afa2a/f/rh1673833-remove_removal_of_wformat_during_test_compilation.patch";
+          sha256 = "082lmc30x64x583vqq00c8y0wqih3y4r0mp1c4bqq36l22qv6b6r";
+        })
+      ]
+      ++ lib.optionals (featureVersion == "17") [
+        # Patch borrowed from Alpine to fix build errors with musl libc and recent gcc.
+        # This is applied anywhere to prevent patchrot.
+        (fetchurl {
+          url = "https://git.alpinelinux.org/aports/plain/community/openjdk17/FixNullPtrCast.patch?id=41e78a067953e0b13d062d632bae6c4f8028d91c";
+          sha256 = "sha256-LzmSew51+DyqqGyyMw2fbXeBluCiCYsS1nCjt9hX6zo=";
+        })
+      ]
+      ++ lib.optionals (isBootstrap || (atLeast11 && !atLeast25)) [
+        # Fix build for gnumake-4.4.1:
+        #   https://github.com/openjdk/jdk/pull/12992
+        (fetchpatch {
+          name = "gnumake-4.4.1";
+          url = "https://github.com/openjdk/jdk/commit/9341d135b855cc208d48e47d30cd90aafa354c36.patch";
+          hash = "sha256-Qcm3ZmGCOYLZcskNjj7DYR85R4v07vYvvavrVOYL8vg=";
+        })
+      ]
+      ++ lib.optionals atLeast25 [
+        ./25/patches/make-4.4.1.patch
+      ]
+      ++ lib.optionals (!headless && enableGtk) [
+        (
+          if atLeast17 then ./17/patches/swing-use-gtk-jdk13.patch else ./11/patches/swing-use-gtk-jdk10.patch
+        )
+      ]
+      ++ lib.optionals (featureVersion == "11") [
+        ./11/patches/fix-oopdesc-ptr-alignment-ub.patch
+      ]
+      ++ lib.optionals (featureVersion == "9") [
+        ./9/patches/fix-gnumake-43.patch
+        ./9/patches/fix-pointer-comparison.patch
+        (fetchpatch {
+          name = "gcc10-compilation-fix.patch";
+          url = "https://gitlab.alpinelinux.org/alpine/aports/-/raw/3.17-stable/community/openjdk9/gcc10-compilation-fix.patch";
+          hash = "sha256-/ZmWc2act19Cp2+aFxtDaJfnHQqTI1spyIjangYf5oc=";
+        })
+        (fetchpatch {
+          name = "fix-c1.patch";
+          url = "https://gitlab.alpinelinux.org/alpine/aports/-/raw/3.17-stable/community/openjdk9/JDK-8245051.patch";
+          hash = "sha256-Ch3kkLoVc0UAw+K++jJeTsMtd0CxMN7RJv05Xh0Xf8k=";
+        })
+      ];
+    in
+    builtins.filter (x: !isNull x) patchList;
 
   strictDeps = true;
 
@@ -349,8 +383,15 @@ stdenv.mkDerivation (finalAttrs: {
         "--with-version-pre="
       ]
     else
+      let
+        updateVersion =
+          if !isBootstrap then
+            lib.removePrefix "${featureVersion}u" (lib.elemAt versionSplit 0)
+          else
+            lib.removePrefix "jdk-${featureVersion}+" version;
+      in
       [
-        "--with-update-version=${lib.removePrefix "${featureVersion}u" (lib.elemAt versionSplit 0)}"
+        "--with-update-version=${updateVersion}"
         "--with-build-number=${versionBuild}"
         "--with-milestone=fcs"
       ]
@@ -382,8 +423,13 @@ stdenv.mkDerivation (finalAttrs: {
   ++ lib.optional (
     (featureVersion == "11" || featureVersion == "21") && stdenv.hostPlatform.isx86_64
   ) "--with-jvm-features=zgc"
-  ++ lib.optional headless (if atLeast11 then "--enable-headless-only" else "--disable-headful")
-  ++ lib.optional (!headless && enableJavaFX) "--with-import-modules=${openjfx_jdk}";
+  ++ lib.optional headless (if !is8 then "--enable-headless-only" else "--disable-headful")
+  ++ lib.optional (!headless && enableJavaFX) "--with-import-modules=${openjfx_jdk}"
+  ++ lib.optional (!is8) "--disable-aot"
+  ++ lib.optionals isBootstrap [
+    "--with-jvm-variants=custom"
+    "--with-jvm-features=compiler1,jvmti,fprof,jni-check,services,management,nmt,cds"
+  ];
 
   buildFlags = if atLeast17 then [ "images" ] else [ "all" ];
 
@@ -437,9 +483,13 @@ stdenv.mkDerivation (finalAttrs: {
             "-Wno-error=int-conversion"
             "-Wno-error=incompatible-pointer-types"
           ]
-          ++ lib.optionals (stdenv.cc.isGNU && featureVersion == "8") [
+          ++ lib.optionals (stdenv.cc.isGNU && !atLeast11) [
             # Fix build with gcc15
             "-std=gnu17"
+          ]
+          ++ lib.optionals isBootstrap [
+            "-Wno-zero-as-null-pointer-constant"
+            "-fno-strict-aliasing"
           ]
         );
 
@@ -598,7 +648,7 @@ stdenv.mkDerivation (finalAttrs: {
   passthru = {
     home = "${finalAttrs.finalPackage}/lib/openjdk";
     # Shouldn't this be `jdk-bootstrap = jdk-bootstrap'`?
-    inherit jdk-bootstrap;
+    inherit jdk-bootstrap isBootstrap;
     inherit (source) updateScript;
   }
   // lib.optionalAttrs atLeast11 { inherit gtk3; }

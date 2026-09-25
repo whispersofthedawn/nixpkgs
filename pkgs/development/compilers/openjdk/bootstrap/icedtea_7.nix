@@ -51,6 +51,8 @@
   ecj_4,
   jamvm_2,
   # keep-sorted end
+  # Unused, keeping for compatibility with other JDK derivations.
+  enableGtk ? false,
 }:
 let
   version = "2.6.28";
