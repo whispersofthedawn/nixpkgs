@@ -10,4 +10,4 @@ let
     directory = ./bootstrap;
   };
 in
-packages
+lib.filterAttrs (n: v: n != "builders") packages
