@@ -147,7 +147,7 @@ stdenv.mkDerivation (finalAttrs: {
   outputs = [
     "out"
   ]
-  ++ lib.optionals (!atLeast11) [
+  ++ lib.optionals (lib.versionOlder featureVersion "9") [
     "jre"
   ];
 
@@ -183,7 +183,7 @@ stdenv.mkDerivation (finalAttrs: {
         (
           if atLeast11 then
             ./11/patches/currency-date-range-jdk10.patch
-          else if is8 then
+          else if lib.versionOlder featureVersion "10" then
             ./8/patches/currency-date-range-jdk8.patch
           else
             null
@@ -256,6 +256,7 @@ stdenv.mkDerivation (finalAttrs: {
         ./11/patches/fix-oopdesc-ptr-alignment-ub.patch
       ]
       ++ lib.optionals (featureVersion == "9") [
+        ./9/patches/fix-missing-include.patch
         ./9/patches/fix-gnumake-43.patch
         ./9/patches/fix-pointer-comparison.patch
         (fetchpatch {
@@ -267,6 +268,14 @@ stdenv.mkDerivation (finalAttrs: {
           name = "fix-c1.patch";
           url = "https://gitlab.alpinelinux.org/alpine/aports/-/raw/3.17-stable/community/openjdk9/JDK-8245051.patch";
           hash = "sha256-Ch3kkLoVc0UAw+K++jJeTsMtd0CxMN7RJv05Xh0Xf8k=";
+        })
+        (fetchpatch {
+          name = "glibc-2.34-stackguardpages-test.patch";
+          url = "https://github.com/openjdk/jdk/commit/f77a1a156f3da9068d012d9227c7ee0fee58f571.patch";
+          stripLen = 4;
+          extraPrefix = "hotspot/test/";
+          hunks = [ "2-" ];
+          hash = "sha256-qpYKM5f/UEVtlLuw8LM6sKwoy9h7QV2xC1SK6rq0tOY=";
         })
       ];
     in
@@ -530,7 +539,9 @@ stdenv.mkDerivation (finalAttrs: {
 
   installPhase = ''
     mkdir -p $out/lib
-    mv build/*/images/${if atLeast11 then "jdk" else "j2sdk-image"} $out/lib/openjdk
+    mv build/*/images/${
+      if lib.versionAtLeast featureVersion "9" then "jdk" else "j2sdk-image"
+    } $out/lib/openjdk
   ''
   # Remove some broken manpages.
   + ''
@@ -560,7 +571,7 @@ stdenv.mkDerivation (finalAttrs: {
       rm -rf $out/lib/openjdk/sample
     ''
     + lib.optionalString headless (
-      if atLeast11 then
+      if lib.versionAtLeast featureVersion "9" then
         ''
           rm $out/lib/openjdk/lib/{libjsound,libfontmanager}.so
         ''
@@ -572,7 +583,7 @@ stdenv.mkDerivation (finalAttrs: {
         ''
     )
   )
-  + lib.optionalString (!atLeast11) (
+  + lib.optionalString (lib.versionOlder featureVersion "9") (
     # Move the JRE to a separate output
     ''
       mkdir -p $jre/lib/openjdk
@@ -627,7 +638,7 @@ stdenv.mkDerivation (finalAttrs: {
     # Propagate the setJavaClassPath setup hook from the JRE so that
     # any package that depends on the JRE has $CLASSPATH set up
     # properly.
-    + lib.optionalString (!atLeast11) ''
+    + lib.optionalString (lib.versionOlder featureVersion "9") ''
       mkdir -p $jre/nix-support
       printWords "${setJavaClassPath}" > $jre/nix-support/propagated-build-inputs
     '';
@@ -639,7 +650,7 @@ stdenv.mkDerivation (finalAttrs: {
   postFixup = ''
     autoPatchelf -- $out
   ''
-  + lib.optionalString (!atLeast11) ''
+  + lib.optionalString (lib.versionOlder featureVersion "9") ''
     autoPatchelf -- $jre
   '';
 

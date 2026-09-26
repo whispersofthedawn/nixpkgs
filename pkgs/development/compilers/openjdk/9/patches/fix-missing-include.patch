@@ -1,0 +1,12 @@
+diff --git a/hotspot/src/share/vm/gc/shared/space.inline.hpp b/hotspot/src/share/vm/gc/shared/space.inline.hpp
+index 77b6f4ceb5..da24235439 100644
+--- a/hotspot/src/share/vm/gc/shared/space.inline.hpp
++++ b/hotspot/src/share/vm/gc/shared/space.inline.hpp
+@@ -26,6 +26,7 @@
+ #define SHARE_VM_GC_SHARED_SPACE_INLINE_HPP
+ 
+ #include "gc/serial/markSweep.inline.hpp"
++#include "gc/shared/blockOffsetTable.inline.hpp"
+ #include "gc/shared/collectedHeap.hpp"
+ #include "gc/shared/generation.hpp"
+ #include "gc/shared/space.hpp"
