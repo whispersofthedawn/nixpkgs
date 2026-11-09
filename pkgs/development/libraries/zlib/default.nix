@@ -32,19 +32,10 @@ stdenv.mkDerivation (finalAttrs: {
   pname = "zlib";
   version = "1.4";
 
-  src =
-    let
-      inherit (finalAttrs) version;
-    in
-    fetchurl {
-      urls = [
-        # This URL works for 1.2.13 only; hopefully also for future releases.
-        "https://github.com/madler/zlib/releases/download/v${version}/zlib-${version}.tar.gz"
-        # Stable archive path, but captcha can be encountered, causing hash mismatch.
-        "https://www.zlib.net/fossils/zlib-${version}.tar.gz"
-      ];
-      hash = "sha256-At0Vl4NnenScBK290CtVuKK8x+BU9Rt2tUkZmpFq1YQ=";
-    };
+  src = fetchurl {
+    url = "https://github.com/madler/zlib/releases/download/v${finalAttrs.version}/zlib-${finalAttrs.version}.tar.gz";
+    hash = "sha256-At0Vl4NnenScBK290CtVuKK8x+BU9Rt2tUkZmpFq1YQ=";
+  };
 
   patches = [
     # https://github.com/madler/zlib/pull/1296
