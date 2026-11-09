@@ -20,17 +20,16 @@ stdenv.mkDerivation (finalAttrs: {
     inherit sha256;
   };
 
-  nativeBuildInputs = [ makeWrapper ];
+  nativeBuildInputs = [
+    makeWrapper
+    perl
+  ];
   buildInputs = [
     perl
     bashNonInteractive
   ]
   ++ extraBuildInputs;
   hardeningDisable = [ "format" ];
-
-  preConfigure = ''
-    export PERL=${perl.interpreter}
-  '';
 
   postInstall = ''
     for bin in $out/bin/*; do

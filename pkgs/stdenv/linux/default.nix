@@ -297,6 +297,7 @@ in
         perl = super.perl.override {
           enableThreading = false;
           enableCrypt = false;
+          enableZlib = false;
         };
 
         # Let gettext "checking for working iconv" success without trying

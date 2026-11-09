@@ -550,6 +550,8 @@ assert bootstrapTools.passthru.isFromBootstrapFiles or false; # sanity check
         # Use this stage’s CF to build CMake. It’s required but can’t be included in the stdenv.
         cmake = self.cmakeMinimal;
 
+        file = super.file.override { withZlib = false; };
+
         # Use libiconvReal with gettext to break an infinite recursion.
         gettext = super.gettext.override { libiconv = super.libiconvReal; };
 
@@ -568,6 +570,13 @@ assert bootstrapTools.passthru.isFromBootstrapFiles or false; # sanity check
         meson = super.meson.overrideAttrs { doInstallCheck = false; };
 
         ninja = super.ninja.override { buildDocs = false; };
+
+        perl = super.perl.override { enableZlib = false; };
+        perlPackages = super.perlPackages.overrideScope (
+          final: prev: {
+            perl = self.perl;
+          }
+        );
 
         # pkg-config builds glib, which checks for `arpa/nameser.h` and fails to build if it can’t find it.
         # libresolv is normally propagated by the SDK, but propagation is disabled early in the bootstrap.
@@ -594,9 +603,12 @@ assert bootstrapTools.passthru.isFromBootstrapFiles or false; # sanity check
           pythonAttr = "python3-bootstrap";
           zstd = null; # Avoid infinite recursion due to zstd depending on libiconv, which depends on Python via Meson.
           enableLTO = false;
+          withZlib = false;
         };
 
         scons = super.scons.override { python3Packages = self.python3.pkgs; };
+
+        sqlite = super.sqlite.override { withZlib = false; };
 
         xar = super.xarMinimal;
 

@@ -15,6 +15,9 @@
   sqlite-rsync,
   tinysparql,
 
+  # use zlib unless it's unavailable as we're bootstrapping it
+  withZlib ? true,
+
   # uses readline & ncurses for a better interactive experience if set to true
   interactive ? false,
 
@@ -79,13 +82,14 @@ stdenv.mkDerivation (finalAttrs: {
         'if {0 && [clang_sanitize_address]==0} {'
   '';
 
-  buildInputs = [
-    zlib
-  ]
-  ++ lib.optionals interactive [
-    readline
-    ncurses
-  ];
+  buildInputs =
+    lib.optionals withZlib [
+      zlib
+    ]
+    ++ lib.optionals interactive [
+      readline
+      ncurses
+    ];
 
   strictDeps = true;
 

@@ -7,6 +7,7 @@
   windows,
   libgnurx ? windows.libgnurx,
   updateAutotoolsGnuConfigScriptsHook,
+  withZlib ? true,
   testers,
   pkgsMusl ? { }, # default to empty set to avoid CI fails with allowVariants = false
   versionCheckHook,
@@ -49,7 +50,10 @@ stdenv.mkDerivation (finalAttrs: {
   nativeBuildInputs = [
     updateAutotoolsGnuConfigScriptsHook
   ];
-  buildInputs = [ zlib ] ++ lib.optional stdenv.hostPlatform.isMinGW libgnurx;
+  buildInputs =
+    lib.optionals withZlib [ zlib ] ++ lib.optionals stdenv.hostPlatform.isMinGW [ libgnurx ];
+
+  configureFlags = [ (lib.enableFeature withZlib "zlib") ];
 
   doCheck = true;
 

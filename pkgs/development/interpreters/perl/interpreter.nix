@@ -21,6 +21,7 @@
   makeWrapper,
   enableCrypt ? true,
   libxcrypt ? null,
+  enableZlib ? true,
   overrides ? config.perlPackageOverrides or (p: { }), # TODO: (self: super: {}) like in python
 }@inputs:
 
@@ -220,7 +221,8 @@ stdenv.mkDerivation (
         # https://github.com/Perl/perl5/issues/22295
         # configure cannot figure out that we have crypt automatically, but we really do
         "-Dd_crypt"
-      ];
+      ]
+      ++ lib.optionals (!enableZlib) [ "-Dnoextensions=Compress/Raw/Zlib" ];
 
     configureScript = lib.optionalString (!crossCompiling) "${stdenv.shell} ./Configure";
 
@@ -258,22 +260,17 @@ stdenv.mkDerivation (
       cf_by="nixpkgs"
       cf_time="$(date -d "@$SOURCE_DATE_EPOCH")"
       EOF
-
+    ''
+    + lib.optionalString (enableZlib) ''
       # Compress::Raw::Zlib should use our zlib package instead of the one
       # included with the distribution
       cat > ./cpan/Compress-Raw-Zlib/config.in <<EOF
       BUILD_ZLIB   = False
-      INCLUDE      = ${zlib.dev}/include
-      LIB          = ${zlib.out}/lib
+      ZLIB_INCLUDE = ${zlib.dev}/include
+      ZLIB_LIB     = ${zlib.out}/lib
       OLD_ZLIB     = False
       GZIP_OS_CODE = AUTO_DETECT
       USE_ZLIB_NG  = False
-    ''
-    + lib.optionalString (lib.versionAtLeast version "5.40.0") ''
-      ZLIB_INCLUDE = ${zlib.dev}/include
-      ZLIB_LIB     = ${zlib.out}/lib
-    ''
-    + ''
       EOF
     ''
     + lib.optionalString stdenv.hostPlatform.isDarwin ''

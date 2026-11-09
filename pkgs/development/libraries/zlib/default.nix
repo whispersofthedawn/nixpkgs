@@ -3,22 +3,7 @@
   stdenv,
   fetchurl,
   shared ? !stdenv.hostPlatform.isStatic,
-  # zlib's hand-written `./configure` script is a bit buggy, and it always
-  # builds the static library. The `--enable-shared` argument (alias to
-  # `--shared`) makes it build the shared library too. The `--static` argument
-  # is particularly confusing - if used after `--shared` it disables the build
-  # of the shared library. See also:
-  #
-  # - https://github.com/madler/zlib/pull/394
-  #
-  # Since --static is aliased to --disable-shared, we use this flag in the
-  # `configureFlags` below, along with a few more relevant arguments to
-  # `stdenv.mkDerivation`.
-  #
-  # We avoid the closure size penalty of this buggy upstream behavior by using
-  # a dedicated output for the static library, which is fortuenatly also
-  # supported by the `--libdir` argument to `./configure`.
-  splitStaticOutput ? shared && !(stdenv.hostPlatform.isWindows || stdenv.hostPlatform.isCygwin),
+  cmakeMinimal,
   testers,
   minizip,
 }:
@@ -37,62 +22,25 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-At0Vl4NnenScBK290CtVuKK8x+BU9Rt2tUkZmpFq1YQ=";
   };
 
-  patches = [
-    # https://github.com/madler/zlib/pull/1296
-    ./mingw-shared.patch
-  ];
-
-  postPatch = ''
-    substituteInPlace configure \
-      --replace-fail '/usr/bin/libtool' '${stdenv.cc.targetPrefix}ar' \
-      --replace-fail 'AR="libtool"' 'AR="${stdenv.cc.targetPrefix}ar"' \
-      --replace-fail 'ARFLAGS="-o"' 'ARFLAGS="-r"'
-    substituteInPlace win32/zlib.def \
-      --replace-fail 'gzopen_w' ""
-    substituteInPlace zlib.pc.in \
-      --replace-fail 'Libs: -L''${libdir} -L''${sharedlibdir} -lz' 'Libs: -L''${${lib.optionalString shared "shared"}libdir} -lz'
-  '';
-
-  strictDeps = true;
   outputs = [
     "out"
     "dev"
-  ]
-  ++ lib.optional splitStaticOutput "static";
-  setOutputFlags = false;
-  outputDoc = "dev"; # single tiny man3 page
-
-  preConfigure = lib.optionalString (stdenv.hostPlatform != stdenv.buildPlatform) ''
-    export CHOST=${stdenv.hostPlatform.config}
-  '';
-
-  configureFlags = [
-    "--includedir=${placeholder "dev"}/include"
-    "--sharedlibdir=${placeholder "out"}/${if stdenv.hostPlatform.isWindows then "bin" else "lib"}"
-    "--libdir=${placeholder (if splitStaticOutput then "static" else "out")}/lib"
-    # See comment near splitStaticOutput argument
-    (lib.enableFeature shared "shared")
+    "man"
   ];
-  dontDisableStatic = true;
-  dontAddStaticConfigureFlags = true;
 
-  # Note we don't need to set `dontDisableStatic`, because static-disabling
-  # works by grepping for `enable-static` in the `./configure` script
-  # (see `pkgs/stdenv/generic/setup.sh`), and zlib's handwritten one does
-  # not have such.
-  # It wouldn't hurt setting `dontDisableStatic = static && !splitStaticOutput`
-  # here (in case zlib ever switches to autoconf in the future),
-  # but we don't do it simply to avoid mass rebuilds.
+  strictDeps = true;
 
-  postInstall =
-    # jww (2015-01-06): Sometimes this library install as a .so, even on
-    # Darwin; others time it installs as a .dylib.  I haven't yet figured out
-    # what causes this difference.
-    lib.optionalString stdenv.hostPlatform.isDarwin ''
-      for file in $out/lib/*.so* $out/lib/*.dylib* ; do
-        ${stdenv.cc.bintools.targetPrefix}install_name_tool -id "$file" $file
-      done
-    '';
+  nativeBuildInputs = [ cmakeMinimal ];
+
+  cmakeFlags = [
+    (lib.cmakeBool "ZLIB_BUILD_SHARED" shared)
+    (lib.cmakeBool "ZLIB_BUILD_STATIC" (!shared))
+    # TODO: test if this is useful / builds less
+    # (lib.cmakeBool "ZLIB_BUILD_TESTING" finalAttrs.finalPackage.doCheck)
+  ];
+
+  # TODO: check if this is doing anything
+  doCheck = true;
 
   env =
     lib.optionalAttrs (!stdenv.hostPlatform.isDarwin) {
@@ -118,28 +66,12 @@ stdenv.mkDerivation (finalAttrs: {
   # We don't strip on static cross-compilation because of reports that native
   # stripping corrupted the target library; see commit 12e960f5 for the report.
   dontStrip = stdenv.hostPlatform != stdenv.buildPlatform;
-  configurePlatforms = [ ];
-
-  installFlags = lib.optionals (stdenv.hostPlatform.isMinGW || stdenv.hostPlatform.isCygwin) [
-    "BINARY_PATH=$(out)/bin"
-    "INCLUDE_PATH=$(dev)/include"
-    "LIBRARY_PATH=$(out)/lib"
-  ];
-
-  enableParallelBuilding = true;
-  doCheck = true;
-
-  makeFlags = [
-    "PREFIX=${stdenv.cc.targetPrefix}"
-    "pkgconfigdir=${placeholder "dev"}/share/pkgconfig"
-  ]
-  ++ lib.optionals stdenv.hostPlatform.isCygwin [
-    "SHAREDLIB=cygz.dll"
-    "IMPLIB=libz.dll.a"
-  ];
 
   passthru.tests = {
-    pkg-config = testers.testMetaPkgConfig finalAttrs.finalPackage;
+    pkg-config = testers.hasPkgConfigModules {
+      package = finalAttrs.finalPackage;
+      versionCheck = true;
+    };
     # uses `zlib` derivation:
     inherit minizip;
   };
