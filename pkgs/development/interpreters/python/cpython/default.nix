@@ -26,7 +26,8 @@
   mpdecimal,
   ncurses,
   withOpenssl ? !withMinimalDeps,
-  openssl,
+  openssl_3_5,
+  openssl_4_1,
   withSqlite ? !withMinimalDeps,
   sqlite,
   xz,
@@ -149,6 +150,8 @@ let
   inherit (passthru) pythonOnBuildForHost;
 
   tzdataSupport = !withMinimalDeps && tzdata != null && passthru.pythonAtLeast "3.9";
+
+  openssl = if passthru.pythonAtLeast "3.15" then openssl_4_1 else openssl_3_5;
 
   passthru =
     let
