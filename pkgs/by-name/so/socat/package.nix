@@ -18,6 +18,14 @@ stdenv.mkDerivation rec {
     hash = "sha256-JbxkdikrLmFCIJicd7C2/Kh7slJdl0ezGmY5sftgJBg=";
   };
 
+  patches = [
+    (fetchurl {
+      name = "openssl4-compat.patch";
+      url = "https://src.fedoraproject.org/rpms/socat/raw/7f8555fcc934f2ed25b05ed40a5d41c8857ab193/f/socat-1.8.1.0-openssl4.patch";
+      hash = "sha256-ZiWPsbH2UjatjajL+2iUhTVkI+fygNyOUk3AEsEaVoc=";
+    })
+  ];
+
   postPatch = ''
     patchShebangs test.sh
     substituteInPlace test.sh \
