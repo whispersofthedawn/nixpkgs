@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  fetchpatch,
   openssl,
   sqlite,
   autoreconfHook,
@@ -18,6 +19,14 @@ stdenv.mkDerivation (finalAttrs: {
     rev = "${finalAttrs.version}";
     hash = "sha256-gwqdgGCVPQwPkE6gFlZxZdk6Ln/qZn3CmMfbcLm9p04=";
   };
+
+  patches = [
+    (fetchpatch {
+      name = "openssl4-compat.patch";
+      url = "https://src.fedoraproject.org/rpms/softhsm/raw/ea9f8ed257afcf5c5534dc3063ae9d329ea4f7c7/f/memory-leaks-and-openssl-4.patch";
+      hash = "sha256-Yhn0re6tePLhYPuCq9BAWb3z4HkyalV5Qm4LVoaH0eA=";
+    })
+  ];
 
   nativeBuildInputs = [
     autoreconfHook
@@ -40,6 +49,8 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   strictDeps = true;
+
+  enableParallelBuilding = true;
 
   postInstall = "rm -rf $out/var";
 
