@@ -49,6 +49,13 @@ buildNodejs {
       ./use-correct-env-in-tests.patch
       ./bin-sh-node-run-v22.patch
       ./use-nix-codesign.patch
+
+      # https://github.com/nodejs/node/pull/66775
+      (fetchpatch2 {
+        name = "test-account-for-openssl-4.x-changes.patch";
+        url = "https://github.com/nodejs/node/commit/c61ba86ed02dc0c80c51b9333d3fe9e3e4e2f887.patch?full_index=1";
+        hash = "sha256-T3OpNt7m5xvQlDLwhl80S0fEgd0LMIJjLBpyRN5ers0=";
+      })
     ]
     ++ gypPatches
     ++ lib.optionals (!stdenv.buildPlatform.isDarwin) [
