@@ -22,7 +22,7 @@
 
 rustPlatform.buildRustPackage.override
   {
-    cargo-auditable = cargo-auditable.bootstrap;
+    cargo-auditable = if auditable then cargo-auditable.bootstrap else rustPlatform.rust.cargo;
   }
   {
     pname = "cargo";
@@ -75,10 +75,7 @@ rustPlatform.buildRustPackage.override
     };
 
     postInstall = ''
-      wrapProgram "$out/bin/cargo" --suffix PATH : "${rustc}/bin"
-
       installManPage src/tools/cargo/src/etc/man/*
-
     ''
     + (
       if stdenv.buildPlatform.canExecute stdenv.hostPlatform then
@@ -109,7 +106,7 @@ rustPlatform.buildRustPackage.override
     doInstallCheck = !stdenv.hostPlatform.isStatic && stdenv.hostPlatform.isElf;
     installCheckPhase = ''
       runHook preInstallCheck
-      ${stdenv.cc.targetPrefix}readelf -a $out/bin/.cargo-wrapped | grep -F 'Shared library: [libcurl.so'
+      ${stdenv.cc.targetPrefix}readelf -a $out/bin/cargo | grep -F 'Shared library: [libcurl.so'
       runHook postInstallCheck
     '';
 

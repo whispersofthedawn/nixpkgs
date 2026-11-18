@@ -38,10 +38,6 @@
   wezterm,
   firefox,
   thunderbird,
-  # This only builds std for target and reuses the rustc from build.
-  fastCross,
-  lndir,
-  makeWrapper,
 }:
 
 let
@@ -49,12 +45,11 @@ let
     optionals
     optional
     optionalString
-    concatStringsSep
     ;
-  useLLVM = stdenv.targetPlatform.useLLVM or false;
+  useLLVM = stdenv.hostPlatform.useLLVM or false;
 in
 stdenv.mkDerivation (finalAttrs: {
-  pname = "${targetPackages.stdenv.cc.targetPrefix}rustc";
+  pname = "rustc";
   inherit version;
 
   src = fetchurl {
@@ -79,6 +74,13 @@ stdenv.mkDerivation (finalAttrs: {
   stripDebugList = [ "bin" ];
 
   env = {
+    # TODO: what the fuck are all these freebsd-specific conditionals in this
+    # file? there's some we deleted already, too. surely, *surely*, there's
+    # some more generic property these are getting at than literally "is
+    # freebsd"? maybe "target platform uses libc++ stdenv"? go investigate
+    # this, figure out that property, and then quash whatever nonsense. either
+    # some of these should be host platform-dependent, or they shouldn't exist
+    # at all.
     NIX_LDFLAGS = toString (
       # when linking stage1 libstd: cc: undefined reference to `__cxa_begin_catch'
       # This doesn't apply to cross-building for FreeBSD because the host
@@ -119,13 +121,10 @@ stdenv.mkDerivation (finalAttrs: {
         stdenv: "${prefixForStdenv stdenv}${if (stdenv.cc.isClang or false) then "clang++" else "c++"}";
       setBuild = "--set=target.\"${stdenv.buildPlatform.rust.rustcTargetSpec}\"";
       setHost = "--set=target.\"${stdenv.hostPlatform.rust.rustcTargetSpec}\"";
-      setTarget = "--set=target.\"${stdenv.targetPlatform.rust.rustcTargetSpec}\"";
       ccForBuild = ccPrefixForStdenv pkgsBuildBuild.targetPackages.stdenv;
       cxxForBuild = cxxPrefixForStdenv pkgsBuildBuild.targetPackages.stdenv;
       ccForHost = ccPrefixForStdenv pkgsBuildHost.targetPackages.stdenv;
       cxxForHost = cxxPrefixForStdenv pkgsBuildHost.targetPackages.stdenv;
-      ccForTarget = ccPrefixForStdenv pkgsBuildTarget.targetPackages.stdenv;
-      cxxForTarget = cxxPrefixForStdenv pkgsBuildTarget.targetPackages.stdenv;
     in
     [
       "--sysconfdir=${placeholder "out"}/etc"
@@ -148,41 +147,9 @@ stdenv.mkDerivation (finalAttrs: {
       "--disable-lld"
       "--build=${stdenv.buildPlatform.rust.rustcTargetSpec}"
       "--host=${stdenv.hostPlatform.rust.rustcTargetSpec}"
-      # std is built for all platforms in --target.
-      "--target=${
-        concatStringsSep "," (
-          # Other targets that don't need any extra dependencies to build.
-          optionals (!fastCross) [
-            "wasm32-unknown-unknown"
-            "wasm32v1-none"
-            "bpfel-unknown-none"
-            "bpfeb-unknown-none"
-          ]
-          # (build!=target): When cross-building a compiler we need to add
-          # the build platform as well so rustc can compile build.rs
-          # scripts.
-          ++ optionals (stdenv.buildPlatform != stdenv.targetPlatform && !fastCross) [
-            stdenv.buildPlatform.rust.rustcTargetSpec
-          ]
-          # (host!=target): When building a cross-targeting compiler we
-          # need to add the host platform as well so rustc can compile
-          # build.rs scripts.
-          ++ optionals (stdenv.hostPlatform != stdenv.targetPlatform && !fastCross) [
-            stdenv.hostPlatform.rust.rustcTargetSpec
-          ]
-          ++ [
-            # `make install` only keeps the docs of the last target in the list.
-            # If the `targetPlatform` is not the last entry, we may end up without
-            # `alloc` or `std` docs (if the last target is `no_std`).
-            # More information: https://github.com/rust-lang/rust/issues/140922
-            stdenv.targetPlatform.rust.rustcTargetSpec
-          ]
-        )
-      }"
 
       "${setBuild}.cc=${ccForBuild}"
       "${setHost}.cc=${ccForHost}"
-      "${setTarget}.cc=${ccForTarget}"
 
       # The Rust compiler build identifies platforms by Rust target
       # name, and later arguments override previous arguments. This
@@ -213,45 +180,26 @@ stdenv.mkDerivation (finalAttrs: {
       # distinguish the platforms in cases like these. That would also
       # let us supplant various hacks around the wrappers and hooks
       # that we currently need.
-      "${setTarget}.linker=${ccForTarget}"
       "${setBuild}.linker=${ccForBuild}"
       "${setHost}.linker=${ccForHost}"
 
       "${setBuild}.cxx=${cxxForBuild}"
       "${setHost}.cxx=${cxxForHost}"
-      "${setTarget}.cxx=${cxxForTarget}"
 
       "${setBuild}.crt-static=${lib.boolToString stdenv.buildPlatform.isStatic}"
       "${setHost}.crt-static=${lib.boolToString stdenv.hostPlatform.isStatic}"
-      "${setTarget}.crt-static=${lib.boolToString stdenv.targetPlatform.isStatic}"
     ]
     ++ optionals (!withBundledLLVM) [
       "--enable-llvm-link-shared"
       "${setBuild}.llvm-config=${llvmSharedForBuild.dev}/bin/llvm-config"
       "${setHost}.llvm-config=${llvmSharedForHost.dev}/bin/llvm-config"
-      "${setTarget}.llvm-config=${llvmSharedForTarget.dev}/bin/llvm-config"
     ]
-    ++ optionals fastCross [
-      # Since fastCross only builds std, it doesn't make sense (and
-      # doesn't work) to build a linker.
-      "--disable-llvm-bitcode-linker"
-    ]
-    ++ optionals (!fastCross && stdenv.targetPlatform.config != "wasm32-unknown-none") [
-      # See https://github.com/rust-lang/rust/issues/132802
-      "--set=target.wasm32-unknown-unknown.optimized-compiler-builtins=false"
-      "--set=target.wasm32v1-none.optimized-compiler-builtins=false"
-    ]
-    ++ optionals (stdenv.targetPlatform.isLinux && !(stdenv.targetPlatform.useLLVM or false)) [
+    ++ optionals (stdenv.hostPlatform.isLinux && !(stdenv.hostPlatform.useLLVM or false)) [
       "--enable-profiler" # build libprofiler_builtins
     ]
-    ++ optionals stdenv.targetPlatform.isDarwin [
+    ++ optionals stdenv.hostPlatform.isDarwin [
       # potentially other llvm targets work with the same fix?
       "--enable-profiler" # build libprofiler_builtins
-      # Disable profiler for targets that don't support it
-      "--set=target.wasm32-unknown-unknown.profiler=false"
-      "--set=target.wasm32v1-none.profiler=false"
-      "--set=target.bpfel-unknown-none.profiler=false"
-      "--set=target.bpfeb-unknown-none.profiler=false"
     ]
     ++ optionals stdenv.buildPlatform.isMusl [
       "${setBuild}.musl-root=${pkgsBuildBuild.targetPackages.stdenv.cc.libc}"
@@ -259,16 +207,7 @@ stdenv.mkDerivation (finalAttrs: {
     ++ optionals stdenv.hostPlatform.isMusl [
       "${setHost}.musl-root=${pkgsBuildHost.targetPackages.stdenv.cc.libc}"
     ]
-    ++ optionals stdenv.targetPlatform.isMusl [
-      "${setTarget}.musl-root=${pkgsBuildTarget.targetPackages.stdenv.cc.libc}"
-    ]
-    ++ optionals stdenv.targetPlatform.isWasi [
-      "${setTarget}.wasi-root=${pkgsBuildTarget.targetPackages.stdenv.cc.libc}"
-    ]
-    ++ optionals stdenv.targetPlatform.rust.isNoStdTarget [
-      "--disable-docs"
-    ]
-    ++ optionals (useLLVM && !stdenv.targetPlatform.isFreeBSD) [
+    ++ optionals (useLLVM && !stdenv.hostPlatform.isFreeBSD) [
       # https://github.com/NixOS/nixpkgs/issues/311930
       "--llvm-libunwind=${if withBundledLLVM then "in-tree" else "system"}"
       "--enable-use-libcxx"
@@ -284,47 +223,6 @@ stdenv.mkDerivation (finalAttrs: {
       # -Cforce-frame-pointers specified then, if any)
       "--set=rust.frame-pointers"
     ];
-
-  # if we already have a rust compiler for build just compile the target std
-  # library and reuse compiler
-  buildPhase =
-    if fastCross then
-      ''
-        runHook preBuild
-
-        mkdir -p build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage{0,1}-{std,rustc}/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/
-        ln -s ${rustc.unwrapped}/lib/rustlib/${stdenv.hostPlatform.rust.rustcTargetSpec}/libstd-*.so build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage0-std/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/libstd.so
-        ln -s ${rustc.unwrapped}/lib/rustlib/${stdenv.hostPlatform.rust.rustcTargetSpec}/librustc_driver-*.so build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage0-rustc/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/librustc.so
-        ln -s ${rustc.unwrapped}/bin/rustc build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage0-rustc/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/rustc-main
-        ln -s ${rustc.unwrapped}/bin/rustc build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage1-rustc/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/rustc-main
-        touch build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage0-std/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/.libstd-stamp
-        touch build/${stdenv.hostPlatform.rust.rustcTargetSpec}/stage{0,1}-rustc/${stdenv.hostPlatform.rust.rustcTargetSpec}/release/.librustc-stamp
-        python ./x.py --keep-stage=0 --stage=1 build library
-
-        runHook postBuild
-      ''
-    else
-      null;
-
-  installPhase =
-    if fastCross then
-      ''
-        runHook preInstall
-
-        python ./x.py --keep-stage=0 --stage=1 install library/std
-        mkdir -v $doc $man
-        ln -s ${rustc.unwrapped}/{bin,libexec} $out
-        rm -rf -v $out/lib/rustlib/{manifest-rust-std-,}${stdenv.hostPlatform.rust.rustcTargetSpec}
-        ln -s ${rustc.unwrapped}/lib/rustlib/{manifest-rust-std-,}${stdenv.hostPlatform.rust.rustcTargetSpec} $out/lib/rustlib/
-        ln -s ${rustc.unwrapped}/lib/rustlib/etc $out/lib/rustlib/
-        echo rust-std-${stdenv.hostPlatform.rust.rustcTargetSpec} >> $out/lib/rustlib/components
-        lndir ${rustc.doc} $doc
-        lndir ${rustc.man} $man
-
-        runHook postInstall
-      ''
-    else
-      null;
 
   # the rust build system complains that nix alters the checksums
   dontFixLibtool = true;
@@ -345,7 +243,7 @@ stdenv.mkDerivation (finalAttrs: {
     # Useful debugging parameter
     # export VERBOSE=1
   ''
-  + lib.optionalString (stdenv.hostPlatform.isDarwin || stdenv.targetPlatform.isDarwin) ''
+  + lib.optionalString stdenv.hostPlatform.isDarwin ''
     # Replace hardcoded path to strip with llvm-strip
     # https://github.com/NixOS/nixpkgs/issues/299606
     substituteInPlace compiler/rustc_codegen_ssa/src/back/link.rs \
@@ -387,10 +285,6 @@ stdenv.mkDerivation (finalAttrs: {
     removeReferencesTo
     pkg-config
     xz
-  ]
-  ++ optionals fastCross [
-    lndir
-    makeWrapper
   ];
 
   buildInputs = [
@@ -414,7 +308,7 @@ stdenv.mkDerivation (finalAttrs: {
   setOutputFlags = false;
 
   postInstall =
-    lib.optionalString (enableRustcDev && !fastCross) ''
+    lib.optionalString enableRustcDev ''
       # install rustc-dev components. Necessary to build rls, clippy...
       python x.py dist rustc-dev
       tar xf build/dist/rustc-dev*tar.gz

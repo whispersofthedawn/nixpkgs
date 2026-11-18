@@ -37,9 +37,6 @@ let
       pkgsTargetTarget
       ;
   };
-  # Allow faster cross compiler generation by reusing Build artifacts
-  fastCross =
-    (stdenv.buildPlatform == stdenv.hostPlatform) && (stdenv.hostPlatform != stdenv.targetPlatform);
 in
 {
   lib = lib';
@@ -71,28 +68,24 @@ in
       version = bootstrapVersion;
       hashes = bootstrapHashes;
     };
+
     stable = lib.makeScope newScope (
       self:
       let
         # Like `buildRustPackages`, but may also contain prebuilt binaries to
         # break cycle. Just like `bootstrapTools` for nixpkgs as a whole,
         # nothing in the final package set should refer to this.
-        bootstrapRustPackages =
-          if fastCross then
-            pkgsBuildBuild.rustPackages
-          else
-            self.buildRustPackages.overrideScope (
-              _: _:
-              lib.optionalAttrs (stdenv.buildPlatform == stdenv.hostPlatform)
-                (selectRustPackage pkgsBuildHost).packages.prebuilt
-            );
+        bootstrapRustPackages = (selectRustPackage pkgsBuildHost).packages.prebuilt;
+
         bootRustPlatform = makeRustPlatform bootstrapRustPackages;
       in
       {
         # Packages suitable for build-time, e.g. `build.rs`-type stuff.
         buildRustPackages = (selectRustPackage pkgsBuildHost).packages.stable;
+
         # Analogous to stdenv
         rustPlatform = makeRustPlatform self.buildRustPackages;
+
         rustc-unwrapped = self.callPackage ./rustc.nix {
           version = rustcVersion;
           sha256 = rustcSha256;
@@ -103,7 +96,6 @@ in
             llvmSharedForHost
             llvmSharedForTarget
             llvmPackages
-            fastCross
             ;
 
           patches = rustcPatches;
@@ -111,25 +103,37 @@ in
           # Use boot package set to break cycle
           inherit (bootstrapRustPackages) cargo rustc rustfmt;
         };
-        rustc = wrapRustcWith {
-          inherit (self) rustc-unwrapped;
-          sysroot = if fastCross then self.rustc-unwrapped else null;
-        };
+
+        rustc = wrapRustcWith { inherit (self) rustc-unwrapped sysroot; };
+
         rustfmt = self.callPackage ./rustfmt.nix {
           inherit (self.buildRustPackages) rustc;
         };
-        cargo =
-          if (!fastCross) then
-            self.callPackage ./cargo.nix {
-              # Use boot package set to break cycle
-              rustPlatform = bootRustPlatform;
-            }
-          else
-            self.callPackage ./cargo_cross.nix { };
+
+        cargo-unwrapped = self.callPackage ./cargo.nix {
+          # Use boot package set to break cycle
+          rustPlatform = bootRustPlatform;
+          # TODO: figure out how to re-auditable-ize this whole thing? the
+          # plumbing to get it to not infrec is Confusing™
+          auditable = false;
+        };
+        cargo = self.callPackage ./cargo-wrapper.nix { };
+
         inherit cargo-auditable;
         cargo-auditable-cargo-wrapper = self.callPackage ./cargo-auditable-cargo-wrapper.nix { };
+
         clippy-unwrapped = self.callPackage ./clippy.nix { };
-        clippy = if !fastCross then self.clippy-unwrapped else self.callPackage ./clippy-wrapper.nix { };
+        clippy = self.callPackage ./clippy-wrapper.nix { };
+
+        sysroot = self.callPackage ./sysroot.nix {
+          # we definitely should not need these, but until we get an initial
+          # version and prune down which configure flags we need, it's Fine.
+          inherit
+            llvmSharedForBuild
+            llvmSharedForHost
+            llvmSharedForTarget
+            ;
+        };
       }
     );
   };
