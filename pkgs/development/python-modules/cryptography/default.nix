@@ -9,6 +9,7 @@
   cffi,
   cryptography-vectors ? (callPackage ./vectors.nix { }),
   fetchFromGitHub,
+  fetchpatch,
   isPyPy,
   libiconv,
   openssl,
@@ -35,6 +36,15 @@ buildPythonPackage rec {
     inherit pname version src;
     hash = "sha256-OUfcs3MIoEwUx1BQV1ZYnAx9IDEbQUWEaeddwK0LLmQ=";
   };
+
+  patches = [
+    # https://github.com/pyca/cryptography/pull/15432
+    (fetchpatch {
+      name = "openssl4.1-compat.patch";
+      url = "https://github.com/pyca/cryptography/commit/e83bbe58e373536636baaa7c33a64a6e8f04c953.patch";
+      hash = "sha256-OUtkoug9qGAIgZa6OQhPiP4rcGr86yLpJdRLCtwCloM=";
+    })
+  ];
 
   postPatch = ''
     substituteInPlace pyproject.toml \
