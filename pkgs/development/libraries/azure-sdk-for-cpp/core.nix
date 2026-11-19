@@ -1,6 +1,7 @@
 {
   stdenv,
   fetchFromGitHub,
+  fetchpatch,
   cmake,
   ninja,
   curl,
@@ -23,6 +24,16 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-1OLyTwjfSunwvDMbMTNw0w8txhJxXthtAVeFf7abrIs=";
   };
   sourceRoot = "${finalAttrs.src.name}/sdk/core/azure-core";
+
+  patches = [
+    (fetchpatch {
+      name = "curl-transport-openssl4-compat.patch";
+      url = "https://github.com/Azure/azure-sdk-for-cpp/commit/7ebdd503aa8da2987f42715a37a031d4d88947db.patch";
+      stripLen = 3;
+      includes = [ "src/http/curl/curl.cpp" ];
+      hash = "sha256-8ApCV0iiZXocX7woHLUVFfvozFfFstqdmN1w1x+1Bx4=";
+    })
+  ];
 
   postPatch = ''
     sed -i '/CMAKE_CXX_STANDARD/d' CMakeLists.txt
