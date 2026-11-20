@@ -26,6 +26,10 @@ buildPythonPackage rec {
     hash = "sha256-ZWlY/dnOs5bDt7VSM6Juyr/I34WHSu2UemvzGmrDfio=";
   };
 
+  # honestly? no idea why this is necessary.
+  # https://github.com/pyca/pyopenssl/pull/1545
+  patches = [ ./openssl4.patch ];
+
   outputs = [
     "out"
     "dev"
