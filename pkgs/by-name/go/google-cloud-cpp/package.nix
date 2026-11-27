@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  fetchpatch,
   replaceVars,
   c-ares,
   cmake,
@@ -45,6 +46,14 @@ stdenv.mkDerivation (finalAttrs: {
   patches = [
     (replaceVars ./hardcode-googleapis-path.patch {
       url = googleapis;
+    })
+
+    # this is included in an upstream release, but we're WAY behind on
+    # google-cloud-cpp versions
+    (fetchpatch {
+      name = "openssl4-compat.patch";
+      url = "https://github.com/googleapis/google-cloud-cpp/commit/b67a379263b6fc36fcfcbe779df02b6eec573f2a.patch";
+      hash = "sha256-YVd19JS/25Hx5ZVF6UC08U0h9DhzyHf8Bvm53PTXzQk=";
     })
   ];
 
