@@ -20,7 +20,10 @@ rustPlatform.buildRustPackage (finalAttrs: {
     hash = "sha256-B+MfnYbxIbgMHFWWOYhap1MEbV3/NNYuR9goJDTNn9A=";
   };
 
-  cargoHash = "sha256-ZLQFERi38+0SUxWaYAL4AepgVuAQKo9pxjcMkzA55BM=";
+  # update to a newer openssl-sys for openssl 4 compatibility
+  cargoPatches = [ ./update-openssl-sys.patch ];
+
+  cargoHash = "sha256-jut/e+ozd6Je01w31qkcoIslRlDVy+jYQ/zqVvEgeDw=";
 
   env.SODIUM_USE_PKG_CONFIG = true;
 
