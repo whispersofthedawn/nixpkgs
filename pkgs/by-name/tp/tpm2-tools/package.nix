@@ -1,6 +1,7 @@
 {
   stdenv,
   fetchurl,
+  fetchpatch,
   lib,
   pkg-config,
   makeWrapper,
@@ -20,6 +21,14 @@ stdenv.mkDerivation (finalAttrs: {
     url = "https://github.com/tpm2-software/tpm2-tools/releases/download/${finalAttrs.version}/tpm2-tools-${finalAttrs.version}.tar.gz";
     sha256 = "sha256-HLcxhcroFLThXHwtCyJkLWQPr0h3X0FWof2S7fhL73M=";
   };
+
+  patches = [
+    (fetchpatch {
+      name = "lib-objecth-include-openssl-errh.patch";
+      url = "https://github.com/tpm2-software/tpm2-tools/commit/c2b2c4e5cdc5bbc61779eb4271d5c317efb8c067.patch";
+      hash = "sha256-TW6/0avsOGK8aPebm11r3kODgx+NvV8N+IffSeY+/M8=";
+    })
+  ];
 
   nativeBuildInputs = [
     pkg-config
